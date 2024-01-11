@@ -1,6 +1,6 @@
 Name:           redhat-cloud-client-configuration
 Version:        1
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Red Hat cloud client configuration
 License:        GPLv2+
 URL:            https://github.com/RedHatInsights/redhat-cloud-client-configuration
@@ -192,7 +192,10 @@ fi
 
 
 %changelog
-* Thu Sep 16 2022 Gael Chamoulaud <gchamoul@redhat.com> - 1-10
+* Wed Jun 28 2023 Alba Hita Catala <ahitacat@redhat.com> - 1-11
+- Change pathExists in unregistered.path
+
+* Fri Sep 16 2022 Gael Chamoulaud <gchamoul@redhat.com> - 1-10
 - Remove preset files from %post directive
 
 * Wed Jul 06 2022 Gaël Chamoulaud <gchamoul@redhat.com> - 1-9
