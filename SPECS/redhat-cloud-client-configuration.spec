@@ -1,6 +1,6 @@
 Name:           redhat-cloud-client-configuration
 Version:        1
-Release:        11%{?dist}
+Release:        12%{?dist}
 Summary:        Red Hat cloud client configuration
 License:        GPLv2+
 URL:            https://github.com/RedHatInsights/redhat-cloud-client-configuration
@@ -192,6 +192,10 @@ fi
 
 
 %changelog
+* Mon Jan 22 2024 Jason Jerome <jajerome@redhat.com> - 1-12
+- Updated to cgroup-v2 [CCT-178]
+- Updated release version
+
 * Wed Jun 28 2023 Alba Hita Catala <ahitacat@redhat.com> - 1-11
 - Change pathExists in unregistered.path
 
