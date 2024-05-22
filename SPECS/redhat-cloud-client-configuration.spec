@@ -1,6 +1,6 @@
 Name:           redhat-cloud-client-configuration
 Version:        1
-Release:        10%{?dist}
+Release:        12%{?dist}
 Summary:        Red Hat cloud client configuration
 License:        GPLv2+
 URL:            https://github.com/RedHatInsights/redhat-cloud-client-configuration
@@ -192,6 +192,13 @@ fi
 
 
 %changelog
+* Mon Jan 22 2024 Jason Jerome <jajerome@redhat.com> - 1-12
+- Add gating.yaml file
+
+* Mon Jan 22 2024 Jason Jerome <jajerome@redhat.com> - 1-11
+- Updated to cgroup-v2 [CCT-178]
+- Updated release version
+
 * Fri Sep 16 2022 Gael Chamoulaud <gchamoul@redhat.com> - 1-10
 - Remove preset files from %post directive
 
