@@ -1,9 +1,18 @@
 Name:           redhat-cloud-client-configuration
 Version:        1
-Release:        13%{?dist}
+Release:        15%{?dist}
 Summary:        Red Hat cloud client configuration
 License:        GPL-2.0-or-later
 URL:            https://github.com/RedHatInsights/redhat-cloud-client-configuration
+
+# rhcd or yggdrasil
+%if 0%{?rhel} >= 8 || 0%{?fedora}
+%if 0%{?rhel} >= 10 || 0%{?fedora}
+%global service_name yggdrasil
+%else
+%global service_name rhcd
+%endif
+%endif
 
 Source1: insights-register.service.in
 Source2: insights-unregister.path.in
@@ -20,6 +29,12 @@ Source12: insights-register.path.in
 Source13: rhccc-disable-rhui-repos.py
 Source14: rhccc-disable-rhui-repos.service.in
 Source15: 80-rhccc-disable-rhui-repos.preset
+# We cannot use ${service_name} here, because CI build system can create
+# SRPM on different platform than target platform, where RPM is built
+Source17: yggdrasil.path.in
+Source18: yggdrasil-stop.path.in
+Source19: yggdrasil-stop.service.in
+Source20: 80-yggdrasil-register.preset
 
 Source100: LICENSE
 
@@ -74,10 +89,18 @@ sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE6} > insights-unregistered.serv
 sed -e 's|@libexecdir@|%{_libexecdir}|g' %{SOURCE14} > rhccc-disable-rhui-repos.service
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
+# rhcd or yggdrasil
+%if 0%{?rhel} >= 10 || 0%{?fedora}
+# yggdrasil
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE17} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE18} > %{service_name}-stop.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE19} > %{service_name}-stop.service
+%else
 # rhcd
-sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE7} > rhcd.path
-sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE8} > rhcd-stop.path
-sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE9} > rhcd-stop.service
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE7} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE8} > %{service_name}-stop.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE9} > %{service_name}-stop.service
+%endif
 %endif
 
 %install
@@ -98,11 +121,15 @@ install %{SOURCE13} %{buildroot}%{_libexecdir}
 install -m644 %{SOURCE15} -t %{buildroot}%{_presetdir}/
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-# rhcd
-install -D -m644 rhcd.path %{buildroot}%{_unitdir}/
-install -D -m644 rhcd-stop.path %{buildroot}%{_unitdir}/
-install -D -m644 rhcd-stop.service %{buildroot}%{_unitdir}/
+# rhcd or yggdrasil
+install -D -m644 %{service_name}.path %{buildroot}%{_unitdir}/
+install -D -m644 %{service_name}-stop.path %{buildroot}%{_unitdir}/
+install -D -m644 %{service_name}-stop.service %{buildroot}%{_unitdir}/
+%if 0%{?rhel} >= 10 || 0%{?fedora}
+install -m644 %{SOURCE20} -t %{buildroot}%{_presetdir}/
+%else
 install -m644 %{SOURCE10} -t %{buildroot}%{_presetdir}/
+%endif
 %endif
 
 %post
@@ -110,10 +137,10 @@ install -m644 %{SOURCE10} -t %{buildroot}%{_presetdir}/
 %systemd_post insights-register.path
 %systemd_post insights-unregister.path
 %systemd_post insights-unregistered.path
-# rhcd
+# rhcd or yggdrasil
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_post rhcd.path
-%systemd_post rhcd-stop.path
+%systemd_post %{service_name}.path
+%systemd_post %{service_name}-stop.path
 %endif
 
 # Make sure that rhsmcertd.service is enabled and running
@@ -163,9 +190,9 @@ fi
 %preun
 if [ $1 -eq 0 ]; then
     # Packager removal, unmask register if exists
-    /bin/systemctl unmask --now insights-register.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask insights-register.path > /dev/null 2>&1 || :
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-    /bin/systemctl unmask --now rhcd.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask %{service_name}.path > /dev/null 2>&1 || :
 %endif
 fi
 %systemd_preun insights-register.path
@@ -173,8 +200,8 @@ fi
 %systemd_preun insights-unregistered.path
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_preun rhcd.path
-%systemd_preun rhcd-stop.path
+%systemd_preun %{service_name}.path
+%systemd_preun %{service_name}-stop.path
 %endif
 
 %postun
@@ -183,8 +210,8 @@ fi
 %systemd_postun insights-unregistered.path
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_postun rhcd.path
-%systemd_postun rhcd-stop.path
+%systemd_postun %{service_name}.path
+%systemd_postun %{service_name}-stop.path
 %endif
 
 
@@ -223,7 +250,7 @@ fi
 %files
 %{_presetdir}/80-insights-register.preset
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%{_presetdir}/80-rhcd-register.preset
+%{_presetdir}/80-%{service_name}-register.preset
 %endif
 %{_unitdir}/insights-register.path
 %{_unitdir}/insights-register.service
@@ -232,9 +259,9 @@ fi
 %{_unitdir}/insights-unregistered.path
 %{_unitdir}/insights-unregistered.service
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%{_unitdir}/rhcd-stop.path
-%{_unitdir}/rhcd-stop.service
-%{_unitdir}/rhcd.path
+%{_unitdir}/%{service_name}-stop.path
+%{_unitdir}/%{service_name}-stop.service
+%{_unitdir}/%{service_name}.path
 %endif
 
 
@@ -244,10 +271,10 @@ fi
 %systemd_post insights-unregister.path
 %systemd_post insights-unregistered.path
 %systemd_post rhccc-disable-rhui-repos.service
-# rhcd
+# rhcd or yggdrasil
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_post rhcd.path
-%systemd_post rhcd-stop.path
+%systemd_post %{service_name}.path
+%systemd_post %{service_name}-stop.path
 %endif
 
 # Make sure that rhsmcertd.service is enabled and running
@@ -258,16 +285,44 @@ fi
 touch /var/lib/rhui/disable-rhui || :
 # Run following block only during installation (not during update)
 if [ $1 -eq 1 ]; then
+    rhsmcertd_restart_required=0
+    
     # Try to get current value of auto-registration in rhsm.conf
-    subscription-manager config --list | grep -q '^[ \t]*auto_registration[ \t]*=[ \t]*1'
+    subscription-manager config --list | grep -q '^[ \t]*auto_registration[ \t]*=[ \t]*1[ \t]*$'
     if [ $? -eq 0 ]; then
         auto_reg_enabled=1
     else
         auto_reg_enabled=0
     fi
 
+    # Try to get information if current value of auto_registration_interval in rhsm.conf
+    # has value 1 minute
+    subscription-manager config --list | grep -q '^[ \t]*auto_registration_interval[ \t]*=[ \t]*1[ \t]*$'
+    if [ $? -eq 0 ]; then
+        auto_reg_interval_one_min=1
+    else
+        auto_reg_interval_one_min=0
+    fi
+
+    # Try to get information if current value of auto_registration_identity_interval in rhsm.conf
+    # has value 10 minutes
+    subscription-manager config --list | grep -q '^[ \t]*auto_registration_identity_interval[ \t]*=[ \t]*10[ \t]*$'
+    if [ $? -eq 0 ]; then
+        auto_reg_interval_identity_ten_mins=1
+    else
+        auto_reg_interval_identity_ten_mins=0
+    fi
+
+    # Try to get current value of manage_repos
+    subscription-manager config --list | grep -q '^[ \t]*manage_repos[ \t]*=[ \t]*0[ \t]*$'
+    if [ $? -eq 0 ]; then
+        manage_repos_enabled=0
+    else
+        manage_repos_enabled=1
+    fi
+
     # When we are going to change any configuration value, then save original rhsm.conf
-    if [ $auto_reg_enabled -eq 0 ]; then
+    if [ $auto_reg_enabled -eq 0 -o $manage_repos_enabled -eq 0 -o $auto_reg_interval_one_min -eq 0 -o $auto_reg_interval_identity_ten_mins -eq 0 ]; then
         echo -e "#\n# Automatic backup of rhsm.conf created by %{name}-cdn installation script\n#\n" \
             > /etc/rhsm/rhsm.conf.cloud_save
         cat /etc/rhsm/rhsm.conf >> /etc/rhsm/rhsm.conf.cloud_save
@@ -276,10 +331,32 @@ if [ $1 -eq 1 ]; then
     # Enable auto-registration in rhsm.conf
     if [ $auto_reg_enabled -eq 0 ]; then
         subscription-manager config --rhsmcertd.auto_registration=1
+        rhsmcertd_restart_required=1
+    fi
+
+    # Set splay of auto-registration interval to one minute
+    # (set auto_registration_interval to 1 in rhsm.conf)
+    if [ $auto_reg_interval_one_min -eq 0 ]; then
+        subscription-manager config --rhsmcertd.auto_registration_interval=1
+        rhsmcertd_restart_required=1
+    fi
+
+    # Set splay of auto-registration identity interval to ten minutes
+    # (set auto_registration_identity_interval to 10 in rhsm.conf)
+    if [ $auto_reg_interval_identity_ten_mins -eq 0 ]; then
+        subscription-manager config --rhsmcertd.auto_registration_identity_interval=10
+        rhsmcertd_restart_required=1
+    fi
+
+    # Enable management of redhat.repo on systems running on
+    # public cloud and getting content from CDN
+    if [ $manage_repos_enabled -eq 0 ]; then
+        subscription-manager config --rhsm.manage_repos=1
+        rhsmcertd_restart_required=1
     fi
 
     # Restart rhsmcertd to reload configuration file, when it is necessary
-    if [ $auto_reg_enabled -eq 0 ]; then
+    if [ $rhsmcertd_restart_required -eq 1 ]; then
         /bin/systemctl restart rhsmcertd.service
     fi
 fi
@@ -287,9 +364,9 @@ fi
 %preun cdn
 if [ $1 -eq 0 ]; then
     # Packager removal, unmask register if exists
-    /bin/systemctl unmask --now insights-register.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask insights-register.path > /dev/null 2>&1 || :
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-    /bin/systemctl unmask --now rhcd.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask %{service_name}.path > /dev/null 2>&1 || :
 %endif
 fi
 %systemd_preun insights-register.path
@@ -298,8 +375,8 @@ fi
 %systemd_preun rhccc-disable-rhui-repos.service
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_preun rhcd.path
-%systemd_preun rhcd-stop.path
+%systemd_preun %{service_name}.path
+%systemd_preun %{service_name}-stop.path
 %endif
 
 %postun cdn
@@ -309,8 +386,8 @@ fi
 %systemd_postun rhccc-disable-rhui-repos.service
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%systemd_postun rhcd.path
-%systemd_postun rhcd-stop.path
+%systemd_postun %{service_name}.path
+%systemd_postun %{service_name}-stop.path
 %endif
 
 rm -f /var/lib/rhui/disable-rhui
@@ -323,9 +400,32 @@ if [ $1 -eq 0 ]; then
         # When auto-registration was originally disabled and we had
         # to enable it during installation of this RPM, then disable it
         # again during removal of RPM package to restore original state.
-        grep -q '^[ \t]*auto_registration[ \t]*=[ \t]*0' /etc/rhsm/rhsm.conf.cloud_save
+        grep -q '^[ \t]*auto_registration[ \t]*=[ \t]*0[ \t]*$' /etc/rhsm/rhsm.conf.cloud_save
         if [ $? -eq 0 ]; then
             subscription-manager config --rhsmcertd.auto_registration=0
+            rhsmcertd_restart_required=1
+        fi
+
+        # Was original interval one minute? If not, then restore original value.
+        grep -q '^[ \t]*auto_registration_interval[ \t]*=[ \t]*1[ \t]*$' /etc/rhsm/rhsm.conf.cloud_save
+        if [ $? -ne 0 ]; then
+            original_interval=`sed -n 's/^[ \t]*auto_registration_interval[ \t]*=[ \t]*\(.*\)/\1/p' < /etc/rhsm/rhsm.conf.cloud_save`
+            subscription-manager config --rhsmcertd.auto_registration_interval=${original_interval}
+            rhsmcertd_restart_required=1
+        fi
+
+        # Was original identity interval ten minutes? If not, then restore original value.
+        grep -q '^[ \t]*auto_registration_identity_interval[ \t]*=[ \t]*10[ \t]*$' /etc/rhsm/rhsm.conf.cloud_save
+        if [ $? -ne 0 ]; then
+            original_interval=`sed -n 's/^[ \t]*auto_registration_identity_interval[ \t]*=[ \t]*\(.*\)/\1/p' < /etc/rhsm/rhsm.conf.cloud_save`
+            subscription-manager config --rhsmcertd.auto_registration_identity_interval=${original_interval}
+            rhsmcertd_restart_required=1
+        fi
+
+        # When managing was originally disabled, then disable it again
+        grep -q '^[ \t]*manage_repos[ \t]*=[ \t]*0[ \t]*$' /etc/rhsm/rhsm.conf.cloud_save
+        if [ $? -eq 0 ]; then
+            subscription-manager config --rhsm.manage_repos=0
             rhsmcertd_restart_required=1
         fi
 
@@ -345,7 +445,7 @@ fi
 %{_presetdir}/80-insights-register.preset
 %{_presetdir}/80-rhccc-disable-rhui-repos.preset
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%{_presetdir}/80-rhcd-register.preset
+%{_presetdir}/80-%{service_name}-register.preset
 %endif
 %{_unitdir}/insights-register.path
 %{_unitdir}/insights-register.service
@@ -355,13 +455,24 @@ fi
 %{_unitdir}/insights-unregistered.service
 %{_unitdir}/rhccc-disable-rhui-repos.service
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-%{_unitdir}/rhcd-stop.path
-%{_unitdir}/rhcd-stop.service
-%{_unitdir}/rhcd.path
+%{_unitdir}/%{service_name}-stop.path
+%{_unitdir}/%{service_name}-stop.service
+%{_unitdir}/%{service_name}.path
 %endif
 
 
 %changelog
+* Thu Aug 07 2025 Jiri Hnidek <jhnidek@redhat.com> - 1-15
+- fix: The systemctl unmask does not have --now CLI option
+- fix: Install rhcd* and yggdrasil* unit files correctly
+
+* Thu Jul 24 2025 Jiri Hnidek <jhnidek@redhat.com> - 1-14
+- fix: Use better regular expressions
+- feat: Use auto-reg identity_interval 10 mins for v2
+- fix: Use auto-reg interval one minute for v2
+- fix: Make sure manage_repos is "1" in redhat-cloud-cdn
+- fix: Consider that yggdrasil is used on RHEL 10
+
 * Fri Jan 24 2025 Pino Toscano <ptoscano@redhat.com> - 1-13
 - Rebased packaging from upstream
 - Add redhat-cloud-client-configuration-cdn (RHEL-46218)
