@@ -1,6 +1,6 @@
 Name:           redhat-cloud-client-configuration
 Version:        1
-Release:        15%{?dist}
+Release:        17%{?dist}
 Summary:        Red Hat cloud client configuration
 License:        GPL-2.0-or-later
 URL:            https://github.com/RedHatInsights/redhat-cloud-client-configuration
@@ -14,6 +14,11 @@ URL:            https://github.com/RedHatInsights/redhat-cloud-client-configurat
 %endif
 %endif
 
+# Sources can be obtained by
+# git clone https://github.com/rpm-software-management/tito
+# cd tito
+# tito build --tgz
+Source0: %{name}-%{version}.tar.gz
 Source1: insights-register.service.in
 Source2: insights-unregister.path.in
 Source3: insights-unregister.service.in
@@ -35,13 +40,22 @@ Source17: yggdrasil.path.in
 Source18: yggdrasil-stop.path.in
 Source19: yggdrasil-stop.service.in
 Source20: 80-yggdrasil-register.preset
+Source21: rhccc-owner-allows-mtls-consumer.py
+Source23: 80-rhccc-mtls-consumer.service.conf.in
+Source24: insights-register-pathexists.path.in
+Source25: yggdrasil-pathexists.path.in
+Source26: rhcd-pathexists.path.in
 
 Source100: LICENSE
 
 BuildArch:      noarch
 
 Requires:      insights-client
-Requires:      subscription-manager
+%if 0%{?rhel} >= 10
+Requires:      subscription-manager >= 1.30.15
+%else
+Requires:      subscription-manager >= 1.29.54
+%endif
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 Requires:      rhc
@@ -59,7 +73,11 @@ Configure client autoregistration for cloud environments
 Summary: Red Hat cloud client configuration - CDN
 
 Requires:      insights-client
-Requires:      subscription-manager
+%if 0%{?rhel} >= 10
+Requires:      subscription-manager >= 1.30.15
+%else
+Requires:      subscription-manager >= 1.29.54
+%endif
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 Requires:      rhc
 %endif
@@ -77,10 +95,14 @@ to Red Hat's CDN.
 %build
 # insights-client
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE12} > insights-register.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE24} > insights-register-pathexists.path
 %if 0%{?rhel} >= 8 || 0%{?fedora}
-sed -e 's|@bindir@|%{_bindir}|g' %{SOURCE1} > insights-register.service
+sed -e 's|@bindir@|%{_bindir}|g' -e 's|@libexecdir@|%{_libexecdir}|g' %{SOURCE1} > insights-register.service
 %else
-sed -e 's|@bindir@|%{_bindir}|g' %{SOURCE11} > insights-register.service
+sed -e 's|@bindir@|%{_bindir}|g' -e 's|@libexecdir@|%{_libexecdir}|g' %{SOURCE11} > insights-register.service
+%endif
+%if 0%{?rhel} == 7
+sed -i '/^ExecCondition=/d' insights-register.service
 %endif
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE2} > insights-unregister.path
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' -e 's|@bindir@|%{_bindir}|g' %{SOURCE3} > insights-unregister.service
@@ -92,20 +114,25 @@ sed -e 's|@libexecdir@|%{_libexecdir}|g' %{SOURCE14} > rhccc-disable-rhui-repos.
 # rhcd or yggdrasil
 %if 0%{?rhel} >= 10 || 0%{?fedora}
 # yggdrasil
-sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE17} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' -e 's|@service_name@|%{service_name}|g' %{SOURCE17} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' -e 's|@service_name@|%{service_name}|g' %{SOURCE25} > %{service_name}-pathexists.path
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE18} > %{service_name}-stop.path
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE19} > %{service_name}-stop.service
 %else
 # rhcd
-sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE7} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' -e 's|@service_name@|%{service_name}|g' %{SOURCE7} > %{service_name}.path
+sed -e 's|@sysconfdir@|%{_sysconfdir}|g' -e 's|@service_name@|%{service_name}|g' %{SOURCE26} > %{service_name}-pathexists.path
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE8} > %{service_name}-stop.path
 sed -e 's|@sysconfdir@|%{_sysconfdir}|g' %{SOURCE9} > %{service_name}-stop.service
 %endif
+install -d %{service_name}.service.d
+sed -e 's|@libexecdir@|%{_libexecdir}|g' -e 's|@service_name@|%{service_name}|g' %{SOURCE23} > %{service_name}.service.d/80-rhccc-mtls-consumer.conf
 %endif
 
 %install
 # insights-client
 install -d %{buildroot}%{_unitdir}
+install -m644 insights-register-pathexists.path %{buildroot}%{_unitdir}/
 install -m644 insights-register.path    %{buildroot}%{_unitdir}/
 install -m644 insights-register.service %{buildroot}%{_unitdir}/
 install -m644 insights-unregister.path    %{buildroot}%{_unitdir}/
@@ -118,13 +145,17 @@ install -m644 %{SOURCE4} -t %{buildroot}%{_presetdir}/
 
 install -d %{buildroot}%{_libexecdir}
 install %{SOURCE13} %{buildroot}%{_libexecdir}
+install -m755 %{SOURCE21} %{buildroot}%{_libexecdir}/rhccc-owner-allows-mtls-consumer.py
 install -m644 %{SOURCE15} -t %{buildroot}%{_presetdir}/
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 # rhcd or yggdrasil
 install -D -m644 %{service_name}.path %{buildroot}%{_unitdir}/
+install -D -m644 %{service_name}-pathexists.path %{buildroot}%{_unitdir}/
 install -D -m644 %{service_name}-stop.path %{buildroot}%{_unitdir}/
 install -D -m644 %{service_name}-stop.service %{buildroot}%{_unitdir}/
+install -d %{buildroot}%{_unitdir}/%{service_name}.service.d
+install -m644 %{service_name}.service.d/80-rhccc-mtls-consumer.conf %{buildroot}%{_unitdir}/%{service_name}.service.d/
 %if 0%{?rhel} >= 10 || 0%{?fedora}
 install -m644 %{SOURCE20} -t %{buildroot}%{_presetdir}/
 %else
@@ -135,11 +166,13 @@ install -m644 %{SOURCE10} -t %{buildroot}%{_presetdir}/
 %post
 # insights-client
 %systemd_post insights-register.path
+%systemd_post insights-register-pathexists.path
 %systemd_post insights-unregister.path
 %systemd_post insights-unregistered.path
 # rhcd or yggdrasil
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_post %{service_name}.path
+%systemd_post %{service_name}-pathexists.path
 %systemd_post %{service_name}-stop.path
 %endif
 
@@ -191,26 +224,32 @@ fi
 if [ $1 -eq 0 ]; then
     # Packager removal, unmask register if exists
     /bin/systemctl unmask insights-register.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask insights-register-pathexists.path > /dev/null 2>&1 || :
 %if 0%{?rhel} >= 8 || 0%{?fedora}
     /bin/systemctl unmask %{service_name}.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask %{service_name}-pathexists.path > /dev/null 2>&1 || :
 %endif
 fi
 %systemd_preun insights-register.path
+%systemd_preun insights-register-pathexists.path
 %systemd_preun insights-unregister.path
 %systemd_preun insights-unregistered.path
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_preun %{service_name}.path
+%systemd_preun %{service_name}-pathexists.path
 %systemd_preun %{service_name}-stop.path
 %endif
 
 %postun
 %systemd_postun insights-register.path
+%systemd_postun insights-register-pathexists.path
 %systemd_postun insights-unregister.path
 %systemd_postun insights-unregistered.path
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_postun %{service_name}.path
+%systemd_postun %{service_name}-pathexists.path
 %systemd_postun %{service_name}-stop.path
 %endif
 
@@ -253,27 +292,33 @@ fi
 %{_presetdir}/80-%{service_name}-register.preset
 %endif
 %{_unitdir}/insights-register.path
+%{_unitdir}/insights-register-pathexists.path
 %{_unitdir}/insights-register.service
 %{_unitdir}/insights-unregister.path
 %{_unitdir}/insights-unregister.service
 %{_unitdir}/insights-unregistered.path
 %{_unitdir}/insights-unregistered.service
+%{_libexecdir}/rhccc-owner-allows-mtls-consumer.py
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %{_unitdir}/%{service_name}-stop.path
 %{_unitdir}/%{service_name}-stop.service
 %{_unitdir}/%{service_name}.path
+%{_unitdir}/%{service_name}-pathexists.path
+%{_unitdir}/%{service_name}.service.d/80-rhccc-mtls-consumer.conf
 %endif
 
 
 %post cdn
 # insights-client
 %systemd_post insights-register.path
+%systemd_post insights-register-pathexists.path
 %systemd_post insights-unregister.path
 %systemd_post insights-unregistered.path
 %systemd_post rhccc-disable-rhui-repos.service
 # rhcd or yggdrasil
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_post %{service_name}.path
+%systemd_post %{service_name}-pathexists.path
 %systemd_post %{service_name}-stop.path
 %endif
 
@@ -365,28 +410,34 @@ fi
 if [ $1 -eq 0 ]; then
     # Packager removal, unmask register if exists
     /bin/systemctl unmask insights-register.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask insights-register-pathexists.path > /dev/null 2>&1 || :
 %if 0%{?rhel} >= 8 || 0%{?fedora}
     /bin/systemctl unmask %{service_name}.path > /dev/null 2>&1 || :
+    /bin/systemctl unmask %{service_name}-pathexists.path > /dev/null 2>&1 || :
 %endif
 fi
 %systemd_preun insights-register.path
+%systemd_preun insights-register-pathexists.path
 %systemd_preun insights-unregister.path
 %systemd_preun insights-unregistered.path
 %systemd_preun rhccc-disable-rhui-repos.service
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_preun %{service_name}.path
+%systemd_preun %{service_name}-pathexists.path
 %systemd_preun %{service_name}-stop.path
 %endif
 
 %postun cdn
 %systemd_postun insights-register.path
+%systemd_postun insights-register-pathexists.path
 %systemd_postun insights-unregister.path
 %systemd_postun insights-unregistered.path
 %systemd_postun rhccc-disable-rhui-repos.service
 
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %systemd_postun %{service_name}.path
+%systemd_postun %{service_name}-pathexists.path
 %systemd_postun %{service_name}-stop.path
 %endif
 
@@ -448,20 +499,31 @@ fi
 %{_presetdir}/80-%{service_name}-register.preset
 %endif
 %{_unitdir}/insights-register.path
+%{_unitdir}/insights-register-pathexists.path
 %{_unitdir}/insights-register.service
 %{_unitdir}/insights-unregister.path
 %{_unitdir}/insights-unregister.service
 %{_unitdir}/insights-unregistered.path
 %{_unitdir}/insights-unregistered.service
 %{_unitdir}/rhccc-disable-rhui-repos.service
+%{_libexecdir}/rhccc-owner-allows-mtls-consumer.py
 %if 0%{?rhel} >= 8 || 0%{?fedora}
 %{_unitdir}/%{service_name}-stop.path
 %{_unitdir}/%{service_name}-stop.service
 %{_unitdir}/%{service_name}.path
+%{_unitdir}/%{service_name}-pathexists.path
+%{_unitdir}/%{service_name}.service.d/80-rhccc-mtls-consumer.conf
 %endif
 
 
 %changelog
+* Wed Jul 29 2026 Christopher Snyder <csnyder@redhat.com> - 1-17
+- fix: Require correct subscription-manager on RHEL 10 & RHEL 9
+
+* Fri Jul 10 2026 Christopher Snyder <csnyder@redhat.com> - 1-16
+- Skip Insights and cloud daemon start for anonymous RHSM owners (CCT-2110)
+- fix: Require the correct minimum version of subscription-manager for anon registration
+
 * Thu Aug 07 2025 Jiri Hnidek <jhnidek@redhat.com> - 1-15
 - fix: The systemctl unmask does not have --now CLI option
 - fix: Install rhcd* and yggdrasil* unit files correctly
